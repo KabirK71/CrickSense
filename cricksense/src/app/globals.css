@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-archivo), Helvetica, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+}
+
+body {
+  margin: 0;
+  background: oklch(0.955 0.005 100);
+  color: oklch(0.24 0.012 100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: oklch(0.44 0.085 158);
+  text-decoration: none;
+}
+a:hover {
+  color: oklch(0.34 0.075 158);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input {
+  font-family: inherit;
+}
+
+::placeholder {
+  color: oklch(0.62 0.01 100);
+}
+
+.hover-card:hover {
+  border-color: oklch(0.44 0.085 158) !important;
+  box-shadow: 0 8px 20px -12px oklch(0.24 0.02 100 / 0.35);
+}
+
+.hover-border:hover {
+  border-color: oklch(0.44 0.085 158) !important;
+}
+
+.hover-link:hover {
+  color: oklch(0.44 0.085 158) !important;
+}
+
+.hover-menu-btn:hover {
+  border-color: oklch(0.44 0.085 158) !important;
+  background: oklch(0.98 0.008 158) !important;
+}
+
+.hover-row:hover {
+  background: oklch(0.97 0.006 158) !important;
+}
+
+.hover-dark-btn:hover {
+  background: oklch(0.44 0.085 158) !important;
+}
+
+.squad-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 560px) {
+  .squad-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 860px) {
+  .squad-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.page-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+@media (min-width: 960px) {
+  .page-columns {
+    grid-template-columns: 1fr minmax(300px, 372px);
+  }
+}
+

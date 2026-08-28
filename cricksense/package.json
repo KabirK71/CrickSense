@@ -1,0 +1,46 @@
+{
+  "name": "cricksense",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "pipeline:download": "python3 pipeline/download_cricsheet.py",
+    "pipeline:parse": "python3 pipeline/parse_matches.py",
+    "pipeline:load": "python3 pipeline/load_to_neon.py",
+    "pipeline:icc": "python3 pipeline/scrape_icc_rankings.py",
+    "ai:compare": "tsx -r dotenv/config scripts/compare-ai.ts dotenv_config_path=.env.local"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@neondatabase/serverless": "^1.1.0",
+    "@react-pdf/renderer": "^4.9.0",
+    "drizzle-orm": "^0.45.2",
+    "groq-sdk": "^1.6.0",
+    "lucide-react": "^1.35.0",
+    "next": "16.3.3",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}
