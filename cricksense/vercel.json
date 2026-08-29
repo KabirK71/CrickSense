@@ -1,3 +1,6 @@
 {
-  "crons": [{ "path": "/api/cron/icc-rankings", "schedule": "0 3 * * 1" }]
+  "crons": [
+    { "path": "/api/cron/icc-rankings", "schedule": "0 3 * * 1" },
+    { "path": "/api/cron/refresh-matches", "schedule": "0 3 * * *" }
+  ]
 }
