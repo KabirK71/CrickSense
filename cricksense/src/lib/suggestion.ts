@@ -191,9 +191,14 @@ function extractStringArray(value: unknown): string[] | null {
  * regardless of which of the above shapes the model produced.
  */
 function parseBullets(text: string): string[] {
+  // Require at least 2 bullets from every recovery strategy -- a lone sentence
+  // (the model occasionally collapses to one line of prose) isn't "bullets",
+  // and letting it through looks sparse next to the "up to 3 points" copy.
+  // Better to fall through to the next strategy, and ultimately to the
+  // guaranteed-multi-bullet rule-based fallback, than show just one.
   try {
     const direct = extractStringArray(JSON.parse(text));
-    if (direct) return direct.slice(0, 3);
+    if (direct && direct.length >= 2) return direct.slice(0, 3);
   } catch {
     // not valid JSON on its own -- keep trying
   }
@@ -202,7 +207,7 @@ function parseBullets(text: string): string[] {
   if (jsonMatch) {
     try {
       const found = extractStringArray(JSON.parse(jsonMatch[0]));
-      if (found) return found.slice(0, 3);
+      if (found && found.length >= 2) return found.slice(0, 3);
     } catch {
       // fall through
     }
@@ -215,7 +220,7 @@ function parseBullets(text: string): string[] {
   if (lines.length >= 2) return lines.slice(0, 3);
 
   const quoted = [...text.matchAll(/"([^"\\]{15,}(?:\\.[^"\\]*)*)"/g)].map((m) => m[1]);
-  if (quoted.length > 0) return quoted.slice(0, 3);
+  if (quoted.length >= 2) return quoted.slice(0, 3);
 
   throw new Error("malformed Groq bullet response");
 }
