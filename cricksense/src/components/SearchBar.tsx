@@ -9,6 +9,7 @@ type SearchOption = {
   title: string;
   sub: string;
   playerId: number;
+  filter?: string | null;
 };
 
 type SearchResponse = {
@@ -62,7 +63,8 @@ export default function SearchBar() {
   function pick(opt: SearchOption) {
     setFocused(false);
     if (opt.playerId >= 0) {
-      router.push(`/player/${opt.playerId}`);
+      const url = opt.filter ? `/player/${opt.playerId}?filter=${opt.filter}` : `/player/${opt.playerId}`;
+      router.push(url);
     } else {
       setQ(opt.title);
     }

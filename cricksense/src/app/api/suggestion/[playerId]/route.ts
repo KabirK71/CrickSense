@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getPlayerById } from "@/db/queries";
 import { generateSuggestion } from "@/lib/suggestion";
 
-export async function GET(_req: Request, ctx: RouteContext<"/api/suggestion/[playerId]">) {
+export async function GET(req: Request, ctx: RouteContext<"/api/suggestion/[playerId]">) {
   const { playerId } = await ctx.params;
   const id = Number(playerId);
   if (!Number.isInteger(id)) {
@@ -14,6 +14,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/suggestion/[pla
     return NextResponse.json({ error: "Player not found" }, { status: 404 });
   }
 
-  const plan = await generateSuggestion(player);
-  return NextResponse.json({ playerId: id, plan });
+  const filter = new URL(req.url).searchParams.get("filter");
+  const plan = await generateSuggestion(player, filter);
+  return NextResponse.json({ playerId: id, filter, plan });
 }

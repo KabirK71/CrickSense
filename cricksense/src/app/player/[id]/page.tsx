@@ -15,13 +15,18 @@ import {
   isBattingRole,
 } from "@/db/queries";
 import { generateSuggestion } from "@/lib/suggestion";
+import { FILTER_LABELS } from "@/lib/search";
 import { CLAY, GREEN } from "@/lib/colors";
 import { card, pageBg } from "@/lib/styles";
 
-export default async function PlayerPage({ params }: PageProps<"/player/[id]">) {
+export default async function PlayerPage({ params, searchParams }: PageProps<"/player/[id]">) {
   const { id } = await params;
   const playerId = Number(id);
   if (!Number.isInteger(playerId)) notFound();
+
+  const { filter: filterParam } = await searchParams;
+  const filter = Array.isArray(filterParam) ? filterParam[0] : (filterParam ?? null);
+  const filterLabel = filter ? (FILTER_LABELS[filter] ?? filter) : null;
 
   const player = await getPlayerById(playerId);
   if (!player) notFound();
@@ -32,7 +37,7 @@ export default async function PlayerPage({ params }: PageProps<"/player/[id]">) 
     batting ? getBattingStats(playerId) : getBowlingStats(playerId),
     batting ? getDismissalsByBowlerType(playerId) : getWicketsByPhase(playerId),
     batting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
-    generateSuggestion(player),
+    generateSuggestion(player, filter),
     getCurrentSquad(),
   ]);
 
@@ -215,7 +220,7 @@ export default async function PlayerPage({ params }: PageProps<"/player/[id]">) 
                       color: "oklch(0.40 0.08 158)",
                     }}
                   >
-                    Suggested plan
+                    {filterLabel ? `Suggested plan vs ${filterLabel}` : "Suggested plan"}
                   </div>
                   <div
                     style={{
@@ -258,9 +263,23 @@ export default async function PlayerPage({ params }: PageProps<"/player/[id]">) 
                   ))}
                 </ul>
                 <div style={{ fontSize: 11.5, color: "oklch(0.48 0.04 158)", lineHeight: 1.4 }}>
-                  Generated from this player&apos;s dismissal and phase splits. Up to three points per player,
-                  regenerated on data refresh.
+                  {filterLabel
+                    ? `Scoped to dismissals involving ${filterLabel}. Clear the filter for this player's overall plan.`
+                    : "Generated from this player's dismissal and phase splits. Up to three points per player, regenerated on data refresh."}
                 </div>
+                {filterLabel && (
+                  <Link
+                    href={`/player/${player.id}`}
+                    className="hover-link"
+                    style={{
+                      font: "500 10.5px/1 var(--font-mono)",
+                      letterSpacing: "0.06em",
+                      color: "oklch(0.40 0.08 158)",
+                    }}
+                  >
+                    ← Clear filter
+                  </Link>
+                )}
               </div>
 
               <div style={{ ...card, borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>

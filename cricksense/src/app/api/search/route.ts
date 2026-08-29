@@ -19,18 +19,20 @@ export async function POST(req: Request) {
 
   const { player, filter, filterLabel } = intent;
   const options = [
-    { viewType: "player", title: player.name, sub: "Full player page", playerId: player.id },
+    { viewType: "player", title: player.name, sub: "Full player page", playerId: player.id, filter: null },
     {
       viewType: "filtered",
       title: filter ? `Dismissals vs ${filter}` : "Dismissals breakdown",
       sub: "Filtered breakdown",
       playerId: player.id,
+      filter: null, // not implemented yet -- lands on the same full page as "player" for now
     },
     {
       viewType: "suggestion",
       title: filter ? `Suggested plan vs ${filter}` : "Suggested plan",
       sub: "AI tactical suggestion",
       playerId: player.id,
+      filter,
     },
   ];
 

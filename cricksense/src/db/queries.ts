@@ -108,22 +108,34 @@ async function countInnings(playerId: number, kind: "bat" | "bowl", year?: numbe
   return row.n;
 }
 
-/** Dismissal type breakdown (caught/lbw/bowled/...) as % of dismissals, for a batsman. */
-export async function getDismissalTypeBreakdown(playerId: number) {
+export type BowlerType = "pace" | "spin" | "swing";
+export type DismissalType = "caught" | "lbw" | "bowled" | "run_out" | "stumped" | "other";
+
+/** Dismissal type breakdown (caught/lbw/bowled/...) as % of dismissals, for a batsman. Optionally scoped to one bowler type. */
+export async function getDismissalTypeBreakdown(playerId: number, opts: { bowlerType?: BowlerType } = {}) {
   const rows = await db
     .select({
       type: deliveries.dismissalType,
       count: sql<number>`count(*)`.mapWith(Number),
     })
     .from(deliveries)
-    .where(and(eq(deliveries.dismissedPlayerId, playerId), sql`${deliveries.dismissalType} is not null`))
+    .where(
+      and(
+        eq(deliveries.dismissedPlayerId, playerId),
+        sql`${deliveries.dismissalType} is not null`,
+        opts.bowlerType ? eq(deliveries.bowlerType, opts.bowlerType) : sql`true`
+      )
+    )
     .groupBy(deliveries.dismissalType);
 
   return toPercentages(rows.map((r) => ({ label: r.type as string, count: r.count })));
 }
 
-/** For a batsman: % of dismissals broken down by the dismissing bowler's type (pace/spin/swing). */
-export async function getDismissalsByBowlerType(playerId: number, year?: number) {
+/** For a batsman: % of dismissals broken down by the dismissing bowler's type (pace/spin/swing). Optionally scoped to a year or a single dismissal type. */
+export async function getDismissalsByBowlerType(
+  playerId: number,
+  opts: { year?: number; dismissalType?: DismissalType } = {}
+) {
   const rows = await db
     .select({
       bowlerType: deliveries.bowlerType,
@@ -132,14 +144,21 @@ export async function getDismissalsByBowlerType(playerId: number, year?: number)
     .from(deliveries)
     .innerJoin(innings, eq(deliveries.inningsId, innings.id))
     .innerJoin(matches, eq(innings.matchId, matches.id))
-    .where(and(eq(deliveries.dismissedPlayerId, playerId), eq(deliveries.isWicket, true), yearFilter(year)))
+    .where(
+      and(
+        eq(deliveries.dismissedPlayerId, playerId),
+        eq(deliveries.isWicket, true),
+        yearFilter(opts.year),
+        opts.dismissalType ? eq(deliveries.dismissalType, opts.dismissalType) : sql`true`
+      )
+    )
     .groupBy(deliveries.bowlerType);
 
   return toPercentages(rows.map((r) => ({ label: r.bowlerType as string, count: r.count })));
 }
 
-/** For a bowler: % of wickets taken, broken down by innings phase. */
-export async function getWicketsByPhase(playerId: number) {
+/** For a bowler: % of wickets taken, broken down by innings phase. Optionally scoped to a single dismissal type. */
+export async function getWicketsByPhase(playerId: number, opts: { dismissalType?: DismissalType } = {}) {
   const rows = await db
     .select({
       phase: deliveries.phase,
@@ -150,7 +169,7 @@ export async function getWicketsByPhase(playerId: number) {
       and(
         eq(deliveries.bowlerId, playerId),
         eq(deliveries.isWicket, true),
-        sql`${deliveries.dismissalType} != 'run_out'`
+        opts.dismissalType ? eq(deliveries.dismissalType, opts.dismissalType) : sql`${deliveries.dismissalType} != 'run_out'`
       )
     )
     .groupBy(deliveries.phase);
@@ -158,15 +177,24 @@ export async function getWicketsByPhase(playerId: number) {
   return toPercentages(rows.map((r) => ({ label: r.phase as string, count: r.count })));
 }
 
-/** For a batsman: which wicket-type they take most often taken by, i.e. their weak innings phase. */
-export async function getDismissalsByPhase(playerId: number) {
+/** For a batsman: which innings phase they're dismissed in most often. Optionally scoped to one bowler type or dismissal type. */
+export async function getDismissalsByPhase(
+  playerId: number,
+  opts: { bowlerType?: BowlerType; dismissalType?: DismissalType } = {}
+) {
   const rows = await db
     .select({
       phase: deliveries.phase,
       count: sql<number>`count(*)`.mapWith(Number),
     })
     .from(deliveries)
-    .where(eq(deliveries.dismissedPlayerId, playerId))
+    .where(
+      and(
+        eq(deliveries.dismissedPlayerId, playerId),
+        opts.bowlerType ? eq(deliveries.bowlerType, opts.bowlerType) : sql`true`,
+        opts.dismissalType ? eq(deliveries.dismissalType, opts.dismissalType) : sql`true`
+      )
+    )
     .groupBy(deliveries.phase);
 
   return toPercentages(rows.map((r) => ({ label: r.phase as string, count: r.count })));
@@ -215,7 +243,7 @@ export async function getPerformers(year?: number) {
       if (!bestStrikeRate || bat.strikeRate > bestStrikeRate.strikeRate)
         bestStrikeRate = { player: p, strikeRate: bat.strikeRate, average: bat.average };
 
-      const byBowlerType = await getDismissalsByBowlerType(p.id, year);
+      const byBowlerType = await getDismissalsByBowlerType(p.id, { year });
       const top = byBowlerType[0];
       if (top && top.pct >= 40 && (!needsAttention || top.pct > needsAttention.pct)) {
         needsAttention = { player: p, pct: top.pct, label: `${top.pct}% dismissals to ${top.label}` };
