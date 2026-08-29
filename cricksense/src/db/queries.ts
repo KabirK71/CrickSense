@@ -1,6 +1,11 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { deliveries, iccRankings, matches, players } from "./schema";
+import { deliveries, iccRankings, innings, matches, players } from "./schema";
+
+/** SQL condition restricting to a single calendar year of matches, or a no-op when year is omitted. */
+function yearFilter(year?: number) {
+  return year ? sql`extract(year from ${matches.startDate}) = ${year}` : sql`true`;
+}
 
 export type PlayerRow = typeof players.$inferSelect;
 
@@ -38,8 +43,8 @@ export async function getPlayerById(id: number) {
   return rows[0] ?? null;
 }
 
-/** Runs, dismissals, balls faced, average, strike rate -- since 2021. */
-export async function getBattingStats(playerId: number) {
+/** Runs, dismissals, balls faced, average, strike rate -- since 2021, or a single year if given. */
+export async function getBattingStats(playerId: number, year?: number) {
   const [row] = await db
     .select({
       runs: sql<number>`coalesce(sum(${deliveries.runs}), 0)`.mapWith(Number),
@@ -47,9 +52,11 @@ export async function getBattingStats(playerId: number) {
       dismissals: sql<number>`coalesce(count(*) filter (where ${deliveries.dismissedPlayerId} = ${playerId}), 0)`.mapWith(Number),
     })
     .from(deliveries)
-    .where(eq(deliveries.batsmanId, playerId));
+    .innerJoin(innings, eq(deliveries.inningsId, innings.id))
+    .innerJoin(matches, eq(innings.matchId, matches.id))
+    .where(and(eq(deliveries.batsmanId, playerId), yearFilter(year)));
 
-  const inningsCount = await countInnings(playerId, "bat");
+  const inningsCount = await countInnings(playerId, "bat", year);
   const average = row.dismissals > 0 ? row.runs / row.dismissals : row.runs;
   const strikeRate = row.ballsFaced > 0 ? (row.runs / row.ballsFaced) * 100 : 0;
 
@@ -62,8 +69,8 @@ export async function getBattingStats(playerId: number) {
   };
 }
 
-/** Wickets, runs conceded, overs bowled, bowling average, economy -- since 2021. */
-export async function getBowlingStats(playerId: number) {
+/** Wickets, runs conceded, overs bowled, bowling average, economy -- since 2021, or a single year if given. */
+export async function getBowlingStats(playerId: number, year?: number) {
   const [row] = await db
     .select({
       wickets: sql<number>`coalesce(count(*) filter (where ${deliveries.isWicket} and ${deliveries.dismissalType} != 'run_out'), 0)`.mapWith(Number),
@@ -71,9 +78,11 @@ export async function getBowlingStats(playerId: number) {
       legalBalls: sql<number>`coalesce(count(*) filter (where ${deliveries.isLegalDelivery}), 0)`.mapWith(Number),
     })
     .from(deliveries)
-    .where(eq(deliveries.bowlerId, playerId));
+    .innerJoin(innings, eq(deliveries.inningsId, innings.id))
+    .innerJoin(matches, eq(innings.matchId, matches.id))
+    .where(and(eq(deliveries.bowlerId, playerId), yearFilter(year)));
 
-  const inningsCount = await countInnings(playerId, "bowl");
+  const inningsCount = await countInnings(playerId, "bowl", year);
   const overs = row.legalBalls / 6;
   const average = row.wickets > 0 ? row.runsConceded / row.wickets : row.runsConceded;
   const economy = overs > 0 ? row.runsConceded / overs : 0;
@@ -88,12 +97,14 @@ export async function getBowlingStats(playerId: number) {
   };
 }
 
-async function countInnings(playerId: number, kind: "bat" | "bowl") {
+async function countInnings(playerId: number, kind: "bat" | "bowl", year?: number) {
   const col = kind === "bat" ? deliveries.batsmanId : deliveries.bowlerId;
   const [row] = await db
     .select({ n: sql<number>`count(distinct ${deliveries.inningsId})`.mapWith(Number) })
     .from(deliveries)
-    .where(eq(col, playerId));
+    .innerJoin(innings, eq(deliveries.inningsId, innings.id))
+    .innerJoin(matches, eq(innings.matchId, matches.id))
+    .where(and(eq(col, playerId), yearFilter(year)));
   return row.n;
 }
 
@@ -112,14 +123,16 @@ export async function getDismissalTypeBreakdown(playerId: number) {
 }
 
 /** For a batsman: % of dismissals broken down by the dismissing bowler's type (pace/spin/swing). */
-export async function getDismissalsByBowlerType(playerId: number) {
+export async function getDismissalsByBowlerType(playerId: number, year?: number) {
   const rows = await db
     .select({
       bowlerType: deliveries.bowlerType,
       count: sql<number>`count(*)`.mapWith(Number),
     })
     .from(deliveries)
-    .where(and(eq(deliveries.dismissedPlayerId, playerId), eq(deliveries.isWicket, true)))
+    .innerJoin(innings, eq(deliveries.inningsId, innings.id))
+    .innerJoin(matches, eq(innings.matchId, matches.id))
+    .where(and(eq(deliveries.dismissedPlayerId, playerId), eq(deliveries.isWicket, true), yearFilter(year)))
     .groupBy(deliveries.bowlerType);
 
   return toPercentages(rows.map((r) => ({ label: r.bowlerType as string, count: r.count })));
@@ -185,8 +198,8 @@ export async function getIccRank(playerId: number) {
   return rows[0] ?? null;
 }
 
-/** Top/bottom performer cards for the homepage. */
-export async function getPerformers() {
+/** Top/bottom performer cards for the homepage, optionally scoped to a single year. */
+export async function getPerformers(year?: number) {
   const squad = await getCurrentSquad();
 
   let mostRuns: { player: PlayerRow; runs: number; average: number } | null = null;
@@ -196,20 +209,20 @@ export async function getPerformers() {
 
   for (const p of squad) {
     if (isBattingRole(p.role)) {
-      const bat = await getBattingStats(p.id);
+      const bat = await getBattingStats(p.id, year);
       if (bat.ballsFaced === 0) continue;
       if (!mostRuns || bat.runs > mostRuns.runs) mostRuns = { player: p, runs: bat.runs, average: bat.average };
       if (!bestStrikeRate || bat.strikeRate > bestStrikeRate.strikeRate)
         bestStrikeRate = { player: p, strikeRate: bat.strikeRate, average: bat.average };
 
-      const byBowlerType = await getDismissalsByBowlerType(p.id);
+      const byBowlerType = await getDismissalsByBowlerType(p.id, year);
       const top = byBowlerType[0];
       if (top && top.pct >= 40 && (!needsAttention || top.pct > needsAttention.pct)) {
         needsAttention = { player: p, pct: top.pct, label: `${top.pct}% dismissals to ${top.label}` };
       }
     }
     if (isBowlingRole(p.role)) {
-      const bowl = await getBowlingStats(p.id);
+      const bowl = await getBowlingStats(p.id, year);
       if (bowl.ballsBowled === 0) continue;
       if (!mostWickets || bowl.wickets > mostWickets.wickets)
         mostWickets = { player: p, wickets: bowl.wickets, average: bowl.average };
@@ -217,4 +230,14 @@ export async function getPerformers() {
   }
 
   return { mostRuns, mostWickets, bestStrikeRate, needsAttention };
+}
+
+/** Calendar years that have at least one match in the database, newest first. */
+export async function getAvailableYears(): Promise<number[]> {
+  const rows = await db
+    .select({ year: sql<number>`extract(year from ${matches.startDate})::int`.mapWith(Number) })
+    .from(matches)
+    .groupBy(sql`extract(year from ${matches.startDate})`)
+    .orderBy(sql`extract(year from ${matches.startDate}) desc`);
+  return rows.map((r) => r.year);
 }

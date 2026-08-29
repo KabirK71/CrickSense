@@ -1,7 +1,8 @@
 import NavBar from "@/components/NavBar";
 import SquadGrid from "@/components/SquadGrid";
 import HighlightCard from "@/components/HighlightCard";
-import { getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
+import YearFilter from "@/components/YearFilter";
+import { getAvailableYears, getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
 import { getCurrentPakistanTest } from "@/lib/live-series";
 import { resolveLiveSquadForGrid } from "@/lib/pipeline/live-squad";
@@ -11,11 +12,16 @@ import { card, pageBg } from "@/lib/styles";
 // come in via the pipeline and weekly cron -- never statically cache this.
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
-  const [squad, dbMatch, performers, highlights, liveSeries] = await Promise.all([
+export default async function HomePage({ searchParams }: PageProps<"/">) {
+  const { year: yearParam } = await searchParams;
+  const yearStr = Array.isArray(yearParam) ? yearParam[0] : yearParam;
+  const year = yearStr ? Number(yearStr) : undefined;
+
+  const [squad, dbMatch, years, performers, highlights, liveSeries] = await Promise.all([
     getCurrentSquad(),
     getLatestMatch(),
-    getPerformers(),
+    getAvailableYears(),
+    getPerformers(Number.isFinite(year) ? year : undefined),
     getHighlights(),
     getCurrentPakistanTest(),
   ]);
@@ -145,15 +151,18 @@ export default async function HomePage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div
-                style={{
-                  font: "500 10.5px/1 var(--font-mono)",
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  color: "oklch(0.52 0.01 100)",
-                }}
-              >
-                Top / bottom performers
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div
+                  style={{
+                    font: "500 10.5px/1 var(--font-mono)",
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                    color: "oklch(0.52 0.01 100)",
+                  }}
+                >
+                  Top / bottom performers
+                </div>
+                <YearFilter years={years} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {performers.mostRuns && (
