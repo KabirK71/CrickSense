@@ -46,6 +46,16 @@ export const players = pgTable("players", {
   iccTestRank: integer("icc_test_rank"),
   isCurrentSquad: boolean("is_current_squad").notNull().default(false),
   isCaptain: boolean("is_captain").notNull().default(false),
+  // Biographical fields backfilled from CricAPI by a periodic cron (see
+  // src/lib/pipeline/refresh-player-bios.ts) rather than fetched live on
+  // every page view -- CricAPI's free tier rate-limits hard, and per-view
+  // fetching meant the bio card randomly vanished once the day's quota was
+  // hit. bioUpdatedAt tracks staleness so the cron knows who to refresh.
+  dateOfBirth: date("date_of_birth"),
+  placeOfBirth: text("place_of_birth"),
+  battingStyle: text("batting_style"),
+  bowlingStyleText: text("bowling_style_text"),
+  bioUpdatedAt: timestamp("bio_updated_at"),
 });
 
 export const matches = pgTable("matches", {

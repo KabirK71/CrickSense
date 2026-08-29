@@ -16,7 +16,6 @@ import {
 } from "@/db/queries";
 import { generateSuggestion } from "@/lib/suggestion";
 import { FILTER_LABELS } from "@/lib/search";
-import { getPlayerBio } from "@/lib/player-bio";
 import { CLAY, GREEN } from "@/lib/colors";
 import { card, pageBg } from "@/lib/styles";
 
@@ -34,14 +33,27 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
 
   const batting = isBattingRole(player.role);
 
-  const [stats, bars, dismissals, plan, squad, bio] = await Promise.all([
+  const [stats, bars, dismissals, plan, squad] = await Promise.all([
     batting ? getBattingStats(playerId) : getBowlingStats(playerId),
     batting ? getDismissalsByBowlerType(playerId) : getWicketsByPhase(playerId),
     batting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
     generateSuggestion(player, filter),
     getCurrentSquad(),
-    getPlayerBio(player.name),
   ]);
+
+  // Backfilled periodically by a cron (see refresh-player-bios.ts), not
+  // fetched live here -- CricAPI's free tier rate-limits hard, and per-view
+  // fetching meant this card randomly disappeared once the day's quota hit.
+  const hasBioData = player.dateOfBirth || player.placeOfBirth || player.battingStyle || player.bowlingStyleText;
+  const bio = hasBioData
+    ? {
+        dateOfBirth: player.dateOfBirth,
+        placeOfBirth: player.placeOfBirth,
+        battingStyle: player.battingStyle,
+        bowlingStyle: player.bowlingStyleText,
+        photoUrl: player.photoUrl,
+      }
+    : null;
 
   const statItems: StatItem[] = batting
     ? [
