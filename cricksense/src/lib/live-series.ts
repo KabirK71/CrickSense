@@ -7,6 +7,7 @@
 // breakdowns, suggested plans, etc.) still come from Cricsheet exclusively
 // once it catches up.
 type CricApiMatch = {
+  id: string;
   name: string;
   matchType: string;
   status: string;
@@ -17,9 +18,11 @@ type CricApiMatch = {
   score?: { r: number; w: number; o: number; inning: string }[];
   matchStarted: boolean;
   matchEnded: boolean;
+  hasSquad?: boolean;
 };
 
 export type LiveSeriesStatus = {
+  matchId: string;
   isLive: boolean;
   opponent: string;
   seriesLabel: string | null;
@@ -27,6 +30,13 @@ export type LiveSeriesStatus = {
   date: string;
   status: string;
   scoreLine: string | null;
+  hasSquad: boolean;
+};
+
+export type LiveSquadEntry = {
+  name: string;
+  role: string | null;
+  bowlingStyle: string | null;
 };
 
 function seriesLabel(name: string): string | null {
@@ -64,6 +74,7 @@ export async function getCurrentPakistanTest(): Promise<LiveSeriesStatus | null>
     const chosen = live ?? [...pakistanTests].sort((a, b) => b.date.localeCompare(a.date))[0];
 
     return {
+      matchId: chosen.id,
       isLive: chosen.matchStarted && !chosen.matchEnded,
       opponent: chosen.teams.find((t) => t !== "Pakistan") ?? "Unknown",
       seriesLabel: seriesLabel(chosen.name),
@@ -71,9 +82,34 @@ export async function getCurrentPakistanTest(): Promise<LiveSeriesStatus | null>
       date: chosen.date,
       status: chosen.status,
       scoreLine: formatScoreLine(chosen),
+      hasSquad: Boolean(chosen.hasSquad),
     };
   } catch (err) {
     console.error("CricAPI fetch failed:", err);
+    return null;
+  }
+}
+
+export async function getLiveSquad(matchId: string): Promise<LiveSquadEntry[] | null> {
+  const key = process.env.CRICAPI_KEY;
+  if (!key) return null;
+
+  try {
+    const res = await fetch(`https://api.cricapi.com/v1/match_squad?apikey=${key}&id=${matchId}`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return null;
+    const payload = await res.json();
+    const teams = (payload.data ?? []) as { teamName: string; players: { name: string; role?: string; bowlingStyle?: string }[] }[];
+    const pakistan = teams.find((t) => t.teamName === "Pakistan");
+    if (!pakistan) return null;
+    return pakistan.players.map((p) => ({
+      name: p.name,
+      role: p.role ?? null,
+      bowlingStyle: p.bowlingStyle ?? null,
+    }));
+  } catch (err) {
+    console.error("CricAPI squad fetch failed:", err);
     return null;
   }
 }

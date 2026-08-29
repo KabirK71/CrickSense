@@ -4,6 +4,7 @@ import HighlightCard from "@/components/HighlightCard";
 import { getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
 import { getCurrentPakistanTest } from "@/lib/live-series";
+import { resolveLiveSquadForGrid } from "@/lib/pipeline/live-squad";
 import { card, pageBg } from "@/lib/styles";
 
 // Squad, performers, and highlights change as new match data / ICC ranks
@@ -25,13 +26,21 @@ export default async function HomePage() {
   // below (squad, performers, highlights) still relies on Cricsheet only.
   const showLive = liveSeries && (liveSeries.isLive || !dbMatch || liveSeries.date >= dbMatch.startDate);
 
-  const squadForGrid = squad.map((p) => ({
-    id: p.id,
-    name: p.name,
-    roleLabel: p.roleLabel,
-    initials: initials(p.name),
-    iccTestRank: p.iccTestRank,
-  }));
+  // When the headline card is showing a live/CricAPI-sourced match, show
+  // that match's actual touring squad instead of the static current-squad
+  // flag, which reflects whatever match this app was last seeded against.
+  const liveSquad =
+    showLive && liveSeries && liveSeries.hasSquad ? await resolveLiveSquadForGrid(liveSeries.matchId) : null;
+
+  const squadForGrid =
+    liveSquad ??
+    squad.map((p) => ({
+      id: p.id,
+      name: p.name,
+      roleLabel: p.roleLabel,
+      initials: initials(p.name),
+      iccTestRank: p.iccTestRank,
+    }));
 
   return (
     <div>
