@@ -3,6 +3,7 @@ import SquadGrid from "@/components/SquadGrid";
 import HighlightCard from "@/components/HighlightCard";
 import { getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
+import { getCurrentPakistanTest } from "@/lib/live-series";
 import { card, pageBg } from "@/lib/styles";
 
 // Squad, performers, and highlights change as new match data / ICC ranks
@@ -10,12 +11,19 @@ import { card, pageBg } from "@/lib/styles";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [squad, match, performers, highlights] = await Promise.all([
+  const [squad, dbMatch, performers, highlights, liveSeries] = await Promise.all([
     getCurrentSquad(),
     getLatestMatch(),
     getPerformers(),
     getHighlights(),
+    getCurrentPakistanTest(),
   ]);
+
+  // Cricsheet (dbMatch) only has fully-finished matches, often days behind a
+  // real series -- if CricAPI knows about a Pakistan Test that's newer (or
+  // still in progress), show that as the headline instead. Deep analysis
+  // below (squad, performers, highlights) still relies on Cricsheet only.
+  const showLive = liveSeries && (liveSeries.isLive || !dbMatch || liveSeries.date >= dbMatch.startDate);
 
   const squadForGrid = squad.map((p) => ({
     id: p.id,
@@ -38,7 +46,7 @@ export default async function HomePage() {
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 24, minWidth: 0 }}>
-            {match && (
+            {showLive && liveSeries ? (
               <div
                 style={{
                   background: "oklch(0.30 0.045 158)",
@@ -53,21 +61,74 @@ export default async function HomePage() {
                 }}
               >
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
-                    MOST RECENT TEST
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {liveSeries.isLive && (
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: "oklch(0.72 0.19 30)",
+                          flex: "none",
+                        }}
+                      />
+                    )}
+                    <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
+                      {liveSeries.isLive ? "LIVE NOW" : "RECENT MATCH"}
+                    </div>
                   </div>
                   <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                    Pakistan vs {match.opponent}
+                    Pakistan vs {liveSeries.opponent}
+                    {liveSeries.seriesLabel ? ` · ${liveSeries.seriesLabel}` : ""}
                   </div>
                   <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
-                    {match.venue} · {new Date(match.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                    {liveSeries.venue} · {new Date(liveSeries.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flex: "none" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}>{match.result}</div>
-                  <div style={{ fontSize: 13, color: "oklch(0.84 0.03 158)" }}>Post-match analysis</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", maxWidth: 320 }}>{liveSeries.status}</div>
+                  {liveSeries.scoreLine && (
+                    <div style={{ fontSize: 13, color: "oklch(0.84 0.03 158)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+                      {liveSeries.scoreLine}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: "oklch(0.72 0.03 158)", marginTop: 4 }}>
+                    {liveSeries.isLive ? "Live status · via CricAPI" : "Match finished · full analysis pending Cricsheet"}
+                  </div>
                 </div>
               </div>
+            ) : (
+              dbMatch && (
+                <div
+                  style={{
+                    background: "oklch(0.30 0.045 158)",
+                    borderRadius: 14,
+                    padding: "22px 24px",
+                    color: "oklch(0.97 0.01 158)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                    gap: 20,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
+                      MOST RECENT TEST
+                    </div>
+                    <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                      Pakistan vs {dbMatch.opponent}
+                    </div>
+                    <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
+                      {dbMatch.venue} · {new Date(dbMatch.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flex: "none" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}>{dbMatch.result}</div>
+                    <div style={{ fontSize: 13, color: "oklch(0.84 0.03 158)" }}>Post-match analysis</div>
+                  </div>
+                </div>
+              )
             )}
 
             <SquadGrid squad={squadForGrid} />
