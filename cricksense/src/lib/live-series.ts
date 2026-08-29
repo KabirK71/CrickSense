@@ -14,7 +14,7 @@ type CricApiMatch = {
   venue: string;
   date: string;
   teams: string[];
-  teamInfo?: { name: string; shortname: string }[];
+  teamInfo?: { name: string; shortname: string; img?: string }[];
   score?: { r: number; w: number; o: number; inning: string }[];
   matchStarted: boolean;
   matchEnded: boolean;
@@ -56,17 +56,47 @@ function formatScoreLine(m: CricApiMatch): string | null {
     .join(" · ");
 }
 
-export async function getCurrentPakistanTest(): Promise<LiveSeriesStatus | null> {
+/** Shared fetch of the currentMatches feed -- Next.js dedupes/caches identical fetch calls, so callers of this and getTeamBadges() don't cost extra CricAPI hits within the revalidate window. */
+async function fetchCurrentMatches(): Promise<CricApiMatch[] | null> {
   const key = process.env.CRICAPI_KEY;
   if (!key) return null;
-
   try {
     const res = await fetch(`https://api.cricapi.com/v1/currentMatches?apikey=${key}&offset=0`, {
       next: { revalidate: 3600 },
     });
     if (!res.ok) return null;
     const payload = await res.json();
-    const allMatches = (payload.data ?? []) as CricApiMatch[];
+    return (payload.data ?? []) as CricApiMatch[];
+  } catch (err) {
+    console.error("CricAPI fetch failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Best-effort team badge/flag lookup for teams that aren't real ISO countries
+ * (England, West Indies) and so don't appear in the countries endpoint's
+ * generic-flag list -- see country-flags.ts. Only resolves for teams that
+ * happen to have a match in the current live/recent window; there's no
+ * dedicated "teams" endpoint to look these up unconditionally.
+ */
+export async function getTeamBadges(): Promise<Record<string, string>> {
+  const matches = await fetchCurrentMatches();
+  if (!matches) return {};
+  const badges: Record<string, string> = {};
+  for (const m of matches) {
+    for (const t of m.teamInfo ?? []) {
+      if (t.img && !badges[t.name]) badges[t.name] = t.img;
+    }
+  }
+  return badges;
+}
+
+export async function getCurrentPakistanTest(): Promise<LiveSeriesStatus | null> {
+  const allMatches = await fetchCurrentMatches();
+  if (!allMatches) return null;
+
+  try {
     const pakistanTests = allMatches.filter((m) => m.matchType === "test" && m.teams.includes("Pakistan"));
     if (pakistanTests.length === 0) return null;
 

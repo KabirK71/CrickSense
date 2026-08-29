@@ -1,8 +1,16 @@
 import Link from "next/link";
 import CountriesMenu from "./CountriesMenu";
 import SearchBar from "./SearchBar";
+import { COUNTRY_FLAGS } from "@/lib/country-flags";
+import { getTeamBadges } from "@/lib/live-series";
 
-export default function NavBar() {
+export default async function NavBar() {
+  const teamBadges = await getTeamBadges();
+  // Prefer the real national flag where we have one; team badges (crests,
+  // not flags) only fill in for the handful of cricket "countries" that
+  // aren't sovereign ISO nations (England, West Indies).
+  const flags = { ...teamBadges, ...COUNTRY_FLAGS };
+
   return (
     <div
       style={{
@@ -17,7 +25,7 @@ export default function NavBar() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-        <CountriesMenu />
+        <CountriesMenu flags={flags} />
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div
             style={{

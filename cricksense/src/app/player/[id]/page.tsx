@@ -16,6 +16,7 @@ import {
 } from "@/db/queries";
 import { generateSuggestion } from "@/lib/suggestion";
 import { FILTER_LABELS } from "@/lib/search";
+import { getPlayerBio } from "@/lib/player-bio";
 import { CLAY, GREEN } from "@/lib/colors";
 import { card, pageBg } from "@/lib/styles";
 
@@ -33,12 +34,13 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
 
   const batting = isBattingRole(player.role);
 
-  const [stats, bars, dismissals, plan, squad] = await Promise.all([
+  const [stats, bars, dismissals, plan, squad, bio] = await Promise.all([
     batting ? getBattingStats(playerId) : getBowlingStats(playerId),
     batting ? getDismissalsByBowlerType(playerId) : getWicketsByPhase(playerId),
     batting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
     generateSuggestion(player, filter),
     getCurrentSquad(),
+    getPlayerBio(player.name),
   ]);
 
   const statItems: StatItem[] = batting
@@ -281,6 +283,58 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                   </Link>
                 )}
               </div>
+
+              {bio && (
+                <div style={{ ...card, borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div
+                    style={{
+                      font: "500 10.5px/1 var(--font-mono)",
+                      letterSpacing: "0.16em",
+                      textTransform: "uppercase",
+                      color: "oklch(0.52 0.01 100)",
+                    }}
+                  >
+                    Player bio
+                  </div>
+                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                    {bio.photoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable photo CDN
+                      <img
+                        src={bio.photoUrl}
+                        alt={player.name}
+                        width={56}
+                        height={56}
+                        style={{ borderRadius: "50%", objectFit: "cover", flex: "none" }}
+                      />
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 9, flex: 1 }}>
+                      {bio.dateOfBirth && (
+                        <Row
+                          label="Born"
+                          value={new Date(bio.dateOfBirth).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })}
+                        />
+                      )}
+                      {bio.placeOfBirth && <Row label="Birthplace" value={bio.placeOfBirth} />}
+                      {bio.battingStyle && <Row label="Batting style" value={bio.battingStyle} />}
+                      {bio.bowlingStyle && <Row label="Bowling style" value={bio.bowlingStyle} />}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      borderTop: "1px solid oklch(0.94 0.005 100)",
+                      paddingTop: 13,
+                      font: "400 11px/1.5 var(--font-mono)",
+                      color: "oklch(0.58 0.012 100)",
+                    }}
+                  >
+                    SOURCE: CRICAPI · BIOGRAPHICAL DATA ONLY
+                  </div>
+                </div>
+              )}
 
               <div style={{ ...card, borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
                 <div

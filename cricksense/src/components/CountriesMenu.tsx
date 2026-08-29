@@ -18,7 +18,7 @@ const COUNTRIES = [
   { name: "Ireland", live: false },
 ];
 
-export default function CountriesMenu() {
+export default function CountriesMenu({ flags }: { flags: Record<string, string> }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -100,8 +100,22 @@ export default function CountriesMenu() {
                   borderBottom: "1px solid oklch(0.96 0.004 100)",
                 }}
               >
-                <span style={{ fontSize: 14, color: c.live ? "oklch(0.24 0.012 100)" : "oklch(0.62 0.012 100)" }}>
-                  {c.name}
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {flags[c.name] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable flag CDN
+                    <img
+                      src={flags[c.name]}
+                      alt=""
+                      width={18}
+                      height={13}
+                      style={{ objectFit: "cover", borderRadius: 2, flex: "none" }}
+                    />
+                  ) : (
+                    <span style={{ width: 18, height: 13, flex: "none" }} />
+                  )}
+                  <span style={{ fontSize: 14, color: c.live ? "oklch(0.24 0.012 100)" : "oklch(0.62 0.012 100)" }}>
+                    {c.name}
+                  </span>
                 </span>
                 {c.live ? (
                   <span
