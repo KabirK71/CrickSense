@@ -4,7 +4,7 @@ import HighlightCard from "@/components/HighlightCard";
 import YearFilter from "@/components/YearFilter";
 import { getAvailableYears, getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
-import { getCurrentPakistanTest } from "@/lib/live-series";
+import { getCurrentPakistanTest, getTeamBadges } from "@/lib/live-series";
 import { resolveLiveSquadForGrid } from "@/lib/pipeline/live-squad";
 import { card, pageBg } from "@/lib/styles";
 
@@ -17,13 +17,14 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const yearStr = Array.isArray(yearParam) ? yearParam[0] : yearParam;
   const year = yearStr ? Number(yearStr) : undefined;
 
-  const [squad, dbMatch, years, performers, highlights, liveSeries] = await Promise.all([
+  const [squad, dbMatch, years, performers, highlights, liveSeries, teamBadges] = await Promise.all([
     getCurrentSquad(),
     getLatestMatch(),
     getAvailableYears(),
     getPerformers(Number.isFinite(year) ? year : undefined),
     getHighlights(),
     getCurrentPakistanTest(),
+    getTeamBadges(),
   ]);
 
   // Cricsheet (dbMatch) only has fully-finished matches, often days behind a
@@ -92,8 +93,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                       {liveSeries.isLive ? "LIVE NOW" : "RECENT MATCH"}
                     </div>
                   </div>
-                  <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                  <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
+                    <TeamCrest src={teamBadges.Pakistan} />
                     Pakistan vs {liveSeries.opponent}
+                    <TeamCrest src={teamBadges[liveSeries.opponent]} />
                     {liveSeries.seriesLabel ? ` · ${liveSeries.seriesLabel}` : ""}
                   </div>
                   <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
@@ -131,8 +134,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                     <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
                       MOST RECENT TEST
                     </div>
-                    <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                    <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
+                      <TeamCrest src={teamBadges.Pakistan} />
                       Pakistan vs {dbMatch.opponent}
+                      <TeamCrest src={teamBadges[dbMatch.opponent]} />
                     </div>
                     <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
                       {dbMatch.venue} · {new Date(dbMatch.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
@@ -267,6 +272,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       </div>
     </div>
   );
+}
+
+function TeamCrest({ src }: { src: string | undefined }) {
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable badge CDN
+  return <img src={src} alt="" width={24} height={24} style={{ borderRadius: 5, flex: "none" }} />;
 }
 
 function PerformerCard({ label, name, detail, warn }: { label: string; name: string; detail: string; warn?: boolean }) {

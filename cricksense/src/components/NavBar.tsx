@@ -46,6 +46,9 @@ export default async function NavBar() {
           <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "inherit" }}>CrickSense</div>
           <div
             style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               font: "500 9.5px/1 var(--font-mono)",
               letterSpacing: "0.1em",
               padding: "4px 7px",
@@ -54,6 +57,10 @@ export default async function NavBar() {
               color: "oklch(0.38 0.075 158)",
             }}
           >
+            {teamBadges.Pakistan && (
+              // eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable badge CDN
+              <img src={teamBadges.Pakistan} alt="" width={14} height={14} style={{ borderRadius: 3 }} />
+            )}
             PAKISTAN
           </div>
         </Link>
