@@ -55,9 +55,10 @@ async function groqParse(query: string): Promise<SearchIntent> {
   const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const completion = await client.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: "openai/gpt-oss-20b",
     temperature: 0,
-    max_tokens: 100,
+    max_tokens: 200,
+    reasoning_effort: "low",
     messages: [
       {
         role: "system",

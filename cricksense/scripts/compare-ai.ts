@@ -46,9 +46,10 @@ async function main() {
     if (groq) {
       const t0 = Date.now();
       const completion = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-20b",
         temperature: 0,
-        max_tokens: 100,
+        max_tokens: 200,
+        reasoning_effort: "low",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: query },

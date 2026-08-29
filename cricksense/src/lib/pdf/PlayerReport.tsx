@@ -21,7 +21,9 @@ const s = StyleSheet.create({
   barTrack: { height: 9, backgroundColor: c.bgLight },
   planBox: { borderWidth: 1.5, borderColor: c.ink, padding: 14 },
   planLabel: { fontSize: 8, letterSpacing: 1.2, color: c.ink, marginBottom: 6, textTransform: "uppercase" },
-  planText: { fontSize: 12, lineHeight: 1.4 },
+  planBullet: { flexDirection: "row", gap: 6, marginBottom: 4 },
+  planBulletMark: { fontSize: 12, lineHeight: 1.4 },
+  planText: { fontSize: 12, lineHeight: 1.4, flex: 1 },
   footer: { position: "absolute", bottom: 28, left: 40, right: 40, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 10, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: c.textMuted },
   dismissalGrid: { flexDirection: "row", gap: 20 },
   dismissalItem: { flex: 1 },
@@ -48,7 +50,7 @@ export type PlayerReportProps = {
   statItems: { label: string; value: string }[];
   bars: { label: string; pct: number }[];
   dismissals: { label: string; pct: number }[];
-  plan: string;
+  plan: string[];
   generatedOn: string;
 };
 
@@ -118,7 +120,12 @@ export default function PlayerReport({
 
         <View style={s.planBox}>
           <Text style={s.planLabel}>Suggested plan · AI generated</Text>
-          <Text style={s.planText}>{plan}</Text>
+          {plan.map((bullet, i) => (
+            <View key={i} style={s.planBullet}>
+              <Text style={s.planBulletMark}>—</Text>
+              <Text style={s.planText}>{bullet}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={s.footer} fixed>

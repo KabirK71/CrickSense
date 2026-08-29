@@ -230,12 +230,36 @@ export default async function PlayerPage({ params }: PageProps<"/player/[id]">) 
                     AI
                   </div>
                 </div>
-                <div style={{ fontSize: 17, lineHeight: 1.45, letterSpacing: "-0.01em", color: "oklch(0.26 0.03 158)" }}>
-                  {plan}
-                </div>
+                <ul
+                  style={{
+                    margin: 0,
+                    padding: 0,
+                    listStyle: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  {plan.map((bullet, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        fontSize: 15,
+                        lineHeight: 1.45,
+                        letterSpacing: "-0.01em",
+                        color: "oklch(0.26 0.03 158)",
+                      }}
+                    >
+                      <span style={{ color: "oklch(0.44 0.085 158)", flex: "none" }}>—</span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
                 <div style={{ fontSize: 11.5, color: "oklch(0.48 0.04 158)", lineHeight: 1.4 }}>
-                  Generated from this player&apos;s dismissal and phase splits. One line per player, regenerated on
-                  data refresh.
+                  Generated from this player&apos;s dismissal and phase splits. Up to three points per player,
+                  regenerated on data refresh.
                 </div>
               </div>
 

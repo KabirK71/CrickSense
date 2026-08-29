@@ -27,35 +27,49 @@ async function buildFacts(player: PlayerRow) {
   return { kind: "bowling" as const, byPhase };
 }
 
-function ruleBasedPlan(facts: Awaited<ReturnType<typeof buildFacts>>): string {
+function ruleBasedPlan(facts: Awaited<ReturnType<typeof buildFacts>>): string[] {
   if (facts.kind === "batting") {
     const topBowlerType = facts.byBowlerType[0];
     const topDismissal = facts.byDismissal[0];
     const topPhase = facts.byPhase[0];
     if (!topBowlerType || !topDismissal) {
-      return "Not enough dismissal data yet to suggest a plan.";
+      return ["Not enough dismissal data yet to suggest a plan."];
     }
-    const phasePart = topPhase ? ` in ${PHASE_LABEL[topPhase.label] ?? topPhase.label}` : "";
-    return `Attack with ${topBowlerType.label} early; target ${topDismissal.label.toUpperCase()} dismissals${phasePart}.`;
+    const bullets: string[] = [
+      `Vulnerable to ${topBowlerType.label} bowling — ${topBowlerType.pct}% of dismissals come against it.`,
+      `Most often dismissed ${topDismissal.label.toUpperCase()} (${topDismissal.pct}% of dismissals).`,
+    ];
+    if (topPhase) {
+      bullets.push(
+        `Weakest in ${PHASE_LABEL[topPhase.label] ?? topPhase.label} — ${topPhase.pct}% of dismissals happen in this window.`
+      );
+    }
+    return bullets;
   }
-  const topPhase = facts.byPhase[0];
-  if (!topPhase) return "Not enough wicket data yet to suggest a plan.";
-  return `Most effective in ${PHASE_LABEL[topPhase.label] ?? topPhase.label} — ${topPhase.pct}% of wickets come in this phase.`;
+  if (facts.byPhase.length === 0) return ["Not enough wicket data yet to suggest a plan."];
+  return facts.byPhase.slice(0, 3).map((p, i) => {
+    const phaseLabel = PHASE_LABEL[p.label] ?? p.label;
+    return i === 0
+      ? `Most effective in ${phaseLabel} — ${p.pct}% of wickets come in this phase.`
+      : `${phaseLabel}: ${p.pct}% of wickets.`;
+  });
 }
 
-async function groqPlan(player: PlayerRow, facts: Awaited<ReturnType<typeof buildFacts>>): Promise<string> {
+async function groqPlan(player: PlayerRow, facts: Awaited<ReturnType<typeof buildFacts>>): Promise<string[]> {
   const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
   const completion = await client.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: "openai/gpt-oss-20b",
     temperature: 0.4,
-    max_tokens: 60,
+    max_tokens: 300,
+    reasoning_effort: "low",
     messages: [
       {
         role: "system",
         content:
-          "You are a cricket analyst writing a ONE-SENTENCE tactical plan for how the opposition should bowl to (if batter) " +
+          "You are a cricket analyst writing a tactical scouting note for how the opposition should bowl to (if batter) " +
           "or how a captain should use (if bowler) the named player, based only on the stats given. " +
-          "Be specific and terse, in the style of a scouting note. No preamble, no quotes, one sentence only.",
+          "Reply with ONLY a JSON array of exactly 3 short, terse bullet-point strings (no numbering, no markdown, no preamble). " +
+          "Each bullet should be a distinct, specific insight grounded in the stats provided.",
       },
       {
         role: "user",
@@ -65,10 +79,31 @@ async function groqPlan(player: PlayerRow, facts: Awaited<ReturnType<typeof buil
   });
   const text = completion.choices[0]?.message?.content?.trim();
   if (!text) throw new Error("empty Groq response");
-  return text.replace(/^["']|["']$/g, "");
+  return parseBullets(text);
 }
 
-export async function generateSuggestion(player: PlayerRow): Promise<string> {
+/** Models often ignore "reply with JSON" and write markdown-style bullets instead -- handle both. */
+function parseBullets(text: string): string[] {
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(parsed) && parsed.every((b) => typeof b === "string") && parsed.length > 0) {
+        return parsed.slice(0, 3);
+      }
+    } catch {
+      // fall through to line-based parsing
+    }
+  }
+  const lines = text
+    .split("\n")
+    .map((line) => line.replace(/^[\s]*[-•*]\s*|^\s*\d+[.)]\s*/, "").trim())
+    .filter(Boolean);
+  if (lines.length === 0) throw new Error("malformed Groq bullet response");
+  return lines.slice(0, 3);
+}
+
+export async function generateSuggestion(player: PlayerRow): Promise<string[]> {
   const facts = await buildFacts(player);
   if (process.env.GROQ_API_KEY) {
     try {
