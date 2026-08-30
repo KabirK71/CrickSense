@@ -46,11 +46,11 @@ export const players = pgTable("players", {
   iccTestRank: integer("icc_test_rank"),
   isCurrentSquad: boolean("is_current_squad").notNull().default(false),
   isCaptain: boolean("is_captain").notNull().default(false),
-  // Biographical fields backfilled from CricAPI by a periodic cron (see
-  // src/lib/pipeline/refresh-player-bios.ts) rather than fetched live on
-  // every page view -- CricAPI's free tier rate-limits hard, and per-view
-  // fetching meant the bio card randomly vanished once the day's quota was
-  // hit. bioUpdatedAt tracks staleness so the cron knows who to refresh.
+  // Biographical fields backfilled from CricAPI by the daily
+  // refresh-live-status cron (see src/lib/pipeline/refresh-live-status.ts)
+  // whenever a touring-squad player is missing them -- never fetched live on
+  // page view. bioUpdatedAt just records when we last successfully filled
+  // these in; a player is skipped once they're non-null, no periodic re-check.
   dateOfBirth: date("date_of_birth"),
   placeOfBirth: text("place_of_birth"),
   battingStyle: text("batting_style"),
@@ -108,5 +108,28 @@ export const iccRankings = pgTable("icc_rankings", {
   format: varchar("format", { length: 10 }).notNull().default("test"),
   rank: integer("rank").notNull(),
   points: integer("points"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Single-row snapshot of "what's Pakistan's Test situation right now," written
+// once a day by the refresh-live-status cron (8:30am PKT) instead of asking
+// CricAPI live on every page view. No score/ball-by-ball data lives here on
+// purpose -- just enough to answer "who are they playing, and when." The
+// homepage treats this as stale (and falls back to the last finished
+// Cricsheet match) once updatedAt is more than a few days old.
+export const liveStatus = pgTable("live_status", {
+  id: serial("id").primaryKey(),
+  cricapiMatchId: text("cricapi_match_id"),
+  opponent: text("opponent"),
+  opponentBadgeUrl: text("opponent_badge_url"),
+  pakistanBadgeUrl: text("pakistan_badge_url"),
+  venue: text("venue"),
+  seriesLabel: text("series_label"),
+  // CricAPI's own date (YYYY-MM-DD) and, when it has one, a full ISO
+  // datetime in GMT -- kept as text since we only ever reformat, never do
+  // date math on it in SQL.
+  matchDate: text("match_date"),
+  matchDateTimeGmt: text("match_date_time_gmt"),
+  isToday: boolean("is_today").notNull().default(false),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

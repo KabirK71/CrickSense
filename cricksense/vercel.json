@@ -1,7 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron/icc-rankings", "schedule": "0 3 * * 1" },
+    { "path": "/api/cron/icc-rankings", "schedule": "0 3 * * 4" },
     { "path": "/api/cron/refresh-matches", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/refresh-player-bios", "schedule": "0 4 * * *" }
+    { "path": "/api/cron/refresh-live-status", "schedule": "30 3 * * *" }
   ]
 }

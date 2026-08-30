@@ -2,52 +2,55 @@ import NavBar from "@/components/NavBar";
 import SquadGrid from "@/components/SquadGrid";
 import HighlightCard from "@/components/HighlightCard";
 import YearFilter from "@/components/YearFilter";
-import { getAvailableYears, getCurrentSquad, getLatestMatch, getPerformers, initials } from "@/db/queries";
+import { getAvailableYears, getCurrentSquad, getLatestMatch, getLiveStatus, getPerformers, initials } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
-import { getCurrentPakistanTest, getTeamBadges } from "@/lib/live-series";
-import { resolveLiveSquadForGrid } from "@/lib/pipeline/live-squad";
 import { card, pageBg } from "@/lib/styles";
 
 // Squad, performers, and highlights change as new match data / ICC ranks
 // come in via the pipeline and weekly cron -- never statically cache this.
 export const dynamic = "force-dynamic";
 
+// Pakistan/PKT display of a CricAPI date (+ optional GMT datetime). Kept
+// local to this page since nowhere else needs to render a fixture date.
+function formatFixtureDate(matchDate: string, matchDateTimeGmt: string | null): string {
+  if (matchDateTimeGmt) {
+    const d = new Date(matchDateTimeGmt.replace(" ", "T") + "Z");
+    if (!Number.isNaN(d.getTime())) {
+      return (
+        d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Karachi" }) +
+        " · " +
+        d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Karachi" }) +
+        " PKT"
+      );
+    }
+  }
+  return new Date(matchDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
 export default async function HomePage({ searchParams }: PageProps<"/">) {
   const { year: yearParam } = await searchParams;
   const yearStr = Array.isArray(yearParam) ? yearParam[0] : yearParam;
   const year = yearStr ? Number(yearStr) : undefined;
 
-  const [squad, dbMatch, years, performers, highlights, liveSeries, teamBadges] = await Promise.all([
+  const [squad, dbMatch, years, performers, highlights, liveStatus] = await Promise.all([
     getCurrentSquad(),
     getLatestMatch(),
     getAvailableYears(),
     getPerformers(Number.isFinite(year) ? year : undefined),
     getHighlights(),
-    getCurrentPakistanTest(),
-    getTeamBadges(),
+    getLiveStatus(),
   ]);
 
-  // Cricsheet (dbMatch) only has fully-finished matches, often days behind a
-  // real series -- if CricAPI knows about a Pakistan Test that's newer (or
-  // still in progress), show that as the headline instead. Deep analysis
-  // below (squad, performers, highlights) still relies on Cricsheet only.
-  const showLive = liveSeries && (liveSeries.isLive || !dbMatch || liveSeries.date >= dbMatch.startDate);
-
-  // When the headline card is showing a live/CricAPI-sourced match, show
-  // that match's actual touring squad instead of the static current-squad
-  // flag, which reflects whatever match this app was last seeded against.
-  const liveSquad =
-    showLive && liveSeries && liveSeries.hasSquad ? await resolveLiveSquadForGrid(liveSeries.matchId) : null;
-
-  const squadForGrid =
-    liveSquad ??
-    squad.map((p) => ({
-      id: p.id,
-      name: p.name,
-      roleLabel: p.roleLabel,
-      initials: initials(p.name),
-      iccTestRank: p.iccTestRank,
-    }));
+  // Squad, performers, and highlights are always Cricsheet-only (via
+  // getCurrentSquad, which reads players.is_current_squad -- kept in sync by
+  // the daily refresh-live-status cron, not fetched here).
+  const squadForGrid = squad.map((p) => ({
+    id: p.id,
+    name: p.name,
+    roleLabel: p.roleLabel,
+    initials: initials(p.name),
+    iccTestRank: p.iccTestRank,
+  }));
 
   return (
     <div>
@@ -62,7 +65,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 24, minWidth: 0 }}>
-            {showLive && liveSeries ? (
+            {liveStatus ? (
               <div
                 style={{
                   background: "oklch(0.30 0.045 158)",
@@ -78,7 +81,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               >
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {liveSeries.isLive && (
+                    {liveStatus.isToday && (
                       <span
                         style={{
                           width: 6,
@@ -90,29 +93,21 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                       />
                     )}
                     <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
-                      {liveSeries.isLive ? "LIVE NOW" : "RECENT MATCH"}
+                      {liveStatus.isToday ? "PAKISTAN PLAYS TODAY" : "NEXT UP"}
                     </div>
                   </div>
                   <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
-                    <TeamCrest src={teamBadges.Pakistan} />
-                    Pakistan vs {liveSeries.opponent}
-                    <TeamCrest src={teamBadges[liveSeries.opponent]} />
-                    {liveSeries.seriesLabel ? ` · ${liveSeries.seriesLabel}` : ""}
+                    <TeamCrest src={liveStatus.pakistanBadgeUrl} />
+                    Pakistan vs {liveStatus.opponent}
+                    <TeamCrest src={liveStatus.opponentBadgeUrl} />
+                    {liveStatus.seriesLabel ? ` · ${liveStatus.seriesLabel}` : ""}
                   </div>
                   <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
-                    {liveSeries.venue} · {new Date(liveSeries.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                    {liveStatus.venue} · {formatFixtureDate(liveStatus.matchDate ?? "", liveStatus.matchDateTimeGmt)}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flex: "none" }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", maxWidth: 320 }}>{liveSeries.status}</div>
-                  {liveSeries.scoreLine && (
-                    <div style={{ fontSize: 13, color: "oklch(0.84 0.03 158)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
-                      {liveSeries.scoreLine}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 12, color: "oklch(0.72 0.03 158)", marginTop: 4 }}>
-                    {liveSeries.isLive ? "Live status · via CricAPI" : "Match finished · full analysis pending Cricsheet"}
-                  </div>
+                  <div style={{ fontSize: 12, color: "oklch(0.72 0.03 158)", marginTop: 4 }}>Fixture · via CricAPI</div>
                 </div>
               </div>
             ) : (
@@ -134,10 +129,8 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                     <div style={{ font: "500 10px/1 var(--font-mono)", letterSpacing: "0.18em", color: "oklch(0.78 0.05 158)" }}>
                       MOST RECENT TEST
                     </div>
-                    <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
-                      <TeamCrest src={teamBadges.Pakistan} />
+                    <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.02em" }}>
                       Pakistan vs {dbMatch.opponent}
-                      <TeamCrest src={teamBadges[dbMatch.opponent]} />
                     </div>
                     <div style={{ fontSize: 14, color: "oklch(0.84 0.03 158)" }}>
                       {dbMatch.venue} · {new Date(dbMatch.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
@@ -274,7 +267,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   );
 }
 
-function TeamCrest({ src }: { src: string | undefined }) {
+function TeamCrest({ src }: { src: string | null | undefined }) {
   if (!src) return null;
   // eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable badge CDN
   return <img src={src} alt="" width={24} height={24} style={{ borderRadius: 5, flex: "none" }} />;

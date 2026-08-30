@@ -41,9 +41,8 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
     getCurrentSquad(),
   ]);
 
-  // Backfilled periodically by a cron (see refresh-player-bios.ts), not
-  // fetched live here -- CricAPI's free tier rate-limits hard, and per-view
-  // fetching meant this card randomly disappeared once the day's quota hit.
+  // Backfilled by the daily refresh-live-status cron for squad players
+  // missing this data (see refresh-live-status.ts), never fetched live here.
   const hasBioData = player.dateOfBirth || player.placeOfBirth || player.battingStyle || player.bowlingStyleText;
   const bio = hasBioData
     ? {

@@ -3,8 +3,9 @@
 // live -- these are the actual genericFlag values it returned, not
 // guessed). England and West Indies aren't sovereign ISO countries, so
 // they don't appear in that endpoint at all; their badges (when available)
-// come from live-series.ts's getTeamBadges() instead, which is a
-// best-effort lookup against whatever matches happen to be live/recent.
+// come from the daily-refreshed live_status row instead -- see
+// src/db/queries.ts's getLiveStatus() -- a best-effort match against
+// whichever team Pakistan is currently playing or about to play.
 export const COUNTRY_FLAGS: Record<string, string> = {
   Pakistan: "https://cdorg.b-cdn.net/flags/generic/PK.svg",
   Australia: "https://cdorg.b-cdn.net/flags/generic/AU.svg",

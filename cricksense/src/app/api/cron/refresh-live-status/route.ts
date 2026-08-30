@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { refreshPlayerBios } from "@/lib/pipeline/refresh-player-bios";
+import { refreshLiveStatus } from "@/lib/pipeline/refresh-live-status";
 
 export const maxDuration = 60;
 
@@ -10,10 +10,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const result = await refreshPlayerBios();
+    const result = await refreshLiveStatus();
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("Player bio refresh failed:", err);
+    console.error("Live status refresh failed:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 502 });
   }
 }

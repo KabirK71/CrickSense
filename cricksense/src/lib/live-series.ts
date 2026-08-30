@@ -1,35 +1,35 @@
-// Fills the gap Cricsheet can't: Cricsheet only has fully-finished matches
-// (see NEEDS_YOUR_INPUT.md / chat history), so a series in progress right
-// now is invisible to the rest of this app for days after it starts. CricAPI
-// (cricapi.com / cricketdata.org, free tier) gives a lightweight match
-// status -- not ball-by-ball detail, just "what's the state of the game" --
-// which is all the homepage headline card needs. Deep stats (dismissal
-// breakdowns, suggested plans, etc.) still come from Cricsheet exclusively
-// once it catches up.
-type CricApiMatch = {
+// CricAPI client used ONLY by the daily refresh-live-status cron (see
+// src/lib/pipeline/refresh-live-status.ts) -- never called from a page
+// render. CricAPI's free tier caps out at 100 requests/day, so this whole
+// module exists to ask it exactly once a day, at 8:30am Pakistan time, and
+// save the answer to our own database. No live score, no ball-by-ball detail
+// -- just "who is Pakistan playing, and when," which is all the homepage
+// headline needs.
+export type CricApiMatch = {
   id: string;
   name: string;
   matchType: string;
   status: string;
   venue: string;
   date: string;
+  dateTimeGMT?: string;
   teams: string[];
   teamInfo?: { name: string; shortname: string; img?: string }[];
-  score?: { r: number; w: number; o: number; inning: string }[];
   matchStarted: boolean;
   matchEnded: boolean;
   hasSquad?: boolean;
 };
 
-export type LiveSeriesStatus = {
+export type PakistanFixture = {
   matchId: string;
-  isLive: boolean;
   opponent: string;
-  seriesLabel: string | null;
+  opponentBadgeUrl: string | null;
+  pakistanBadgeUrl: string | null;
   venue: string;
-  date: string;
-  status: string;
-  scoreLine: string | null;
+  seriesLabel: string | null;
+  matchDate: string;
+  matchDateTimeGmt: string | null;
+  isToday: boolean;
   hasSquad: boolean;
 };
 
@@ -45,27 +45,15 @@ function seriesLabel(name: string): string | null {
   return match ? match[1] : null;
 }
 
-function formatScoreLine(m: CricApiMatch): string | null {
-  if (!m.score || m.score.length === 0) return null;
-  return m.score
-    .map((s) => {
-      const teamName = s.inning.replace(/\s+Inning\s+\d+$/i, "");
-      const short = m.teamInfo?.find((t) => t.name === teamName)?.shortname ?? teamName;
-      return `${short} ${s.r}/${s.w}`;
-    })
-    .join(" · ");
-}
-
-/** Shared fetch of the currentMatches feed -- Next.js dedupes/caches identical fetch calls, so callers of this and getTeamBadges() don't cost extra CricAPI hits within the revalidate window. */
-async function fetchCurrentMatches(): Promise<CricApiMatch[] | null> {
-  const key = process.env.CRICAPI_KEY;
-  if (!key) return null;
+async function fetchCurrentMatches(key: string): Promise<CricApiMatch[] | null> {
   try {
-    const res = await fetch(`https://api.cricapi.com/v1/currentMatches?apikey=${key}&offset=0`, {
-      next: { revalidate: 3600 },
-    });
+    const res = await fetch(`https://api.cricapi.com/v1/currentMatches?apikey=${key}&offset=0`);
     if (!res.ok) return null;
     const payload = await res.json();
+    if (payload.status !== "success") {
+      console.error("CricAPI currentMatches failed:", payload.reason ?? payload.status);
+      return null;
+    }
     return (payload.data ?? []) as CricApiMatch[];
   } catch (err) {
     console.error("CricAPI fetch failed:", err);
@@ -73,51 +61,51 @@ async function fetchCurrentMatches(): Promise<CricApiMatch[] | null> {
   }
 }
 
-/**
- * Best-effort team badge/flag lookup for teams that aren't real ISO countries
- * (England, West Indies) and so don't appear in the countries endpoint's
- * generic-flag list -- see country-flags.ts. Only resolves for teams that
- * happen to have a match in the current live/recent window; there's no
- * dedicated "teams" endpoint to look these up unconditionally.
- */
-export async function getTeamBadges(): Promise<Record<string, string>> {
-  const matches = await fetchCurrentMatches();
-  if (!matches) return {};
-  const badges: Record<string, string> = {};
-  for (const m of matches) {
-    for (const t of m.teamInfo ?? []) {
-      if (t.img && !badges[t.name]) badges[t.name] = t.img;
-    }
-  }
-  return badges;
+/** Today's Pakistan Test if one is on, else the soonest upcoming one CricAPI's current window knows about. */
+function pickFixture(matches: CricApiMatch[], todayIso: string): CricApiMatch | null {
+  const pakistanTests = matches.filter((m) => m.matchType === "test" && m.teams.includes("Pakistan"));
+  if (pakistanTests.length === 0) return null;
+
+  const today = pakistanTests.find((m) => m.date === todayIso);
+  if (today) return today;
+
+  const upcoming = pakistanTests
+    .filter((m) => m.date > todayIso)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (upcoming.length > 0) return upcoming[0];
+
+  // Nothing today or upcoming in CricAPI's window -- don't fall back to an
+  // old finished match here, the DB's own Cricsheet match already covers that.
+  return null;
 }
 
-export async function getCurrentPakistanTest(): Promise<LiveSeriesStatus | null> {
-  const allMatches = await fetchCurrentMatches();
-  if (!allMatches) return null;
+/** One CricAPI call, picks the fixture, and returns everything the homepage needs to know. Returns null if CricAPI has nothing relevant right now. */
+export async function fetchPakistanFixture(): Promise<PakistanFixture | null> {
+  const key = process.env.CRICAPI_KEY;
+  if (!key) return null;
 
-  try {
-    const pakistanTests = allMatches.filter((m) => m.matchType === "test" && m.teams.includes("Pakistan"));
-    if (pakistanTests.length === 0) return null;
+  const matches = await fetchCurrentMatches(key);
+  if (!matches) return null;
 
-    const live = pakistanTests.find((m) => m.matchStarted && !m.matchEnded);
-    const chosen = live ?? [...pakistanTests].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const chosen = pickFixture(matches, todayIso);
+  if (!chosen) return null;
 
-    return {
-      matchId: chosen.id,
-      isLive: chosen.matchStarted && !chosen.matchEnded,
-      opponent: chosen.teams.find((t) => t !== "Pakistan") ?? "Unknown",
-      seriesLabel: seriesLabel(chosen.name),
-      venue: chosen.venue,
-      date: chosen.date,
-      status: chosen.status,
-      scoreLine: formatScoreLine(chosen),
-      hasSquad: Boolean(chosen.hasSquad),
-    };
-  } catch (err) {
-    console.error("CricAPI fetch failed:", err);
-    return null;
-  }
+  const opponent = chosen.teams.find((t) => t !== "Pakistan") ?? "Unknown";
+  const badgeFor = (team: string) => chosen.teamInfo?.find((t) => t.name === team)?.img ?? null;
+
+  return {
+    matchId: chosen.id,
+    opponent,
+    opponentBadgeUrl: badgeFor(opponent),
+    pakistanBadgeUrl: badgeFor("Pakistan"),
+    venue: chosen.venue,
+    seriesLabel: seriesLabel(chosen.name),
+    matchDate: chosen.date,
+    matchDateTimeGmt: chosen.dateTimeGMT ?? null,
+    isToday: chosen.date === todayIso,
+    hasSquad: Boolean(chosen.hasSquad),
+  };
 }
 
 export async function getLiveSquad(matchId: string): Promise<LiveSquadEntry[] | null> {
@@ -125,11 +113,13 @@ export async function getLiveSquad(matchId: string): Promise<LiveSquadEntry[] | 
   if (!key) return null;
 
   try {
-    const res = await fetch(`https://api.cricapi.com/v1/match_squad?apikey=${key}&id=${matchId}`, {
-      next: { revalidate: 3600 },
-    });
+    const res = await fetch(`https://api.cricapi.com/v1/match_squad?apikey=${key}&id=${matchId}`);
     if (!res.ok) return null;
     const payload = await res.json();
+    if (payload.status !== "success") {
+      console.error("CricAPI match_squad failed:", payload.reason ?? payload.status);
+      return null;
+    }
     const teams = (payload.data ?? []) as { teamName: string; players: { name: string; role?: string; bowlingStyle?: string }[] }[];
     const pakistan = teams.find((t) => t.teamName === "Pakistan");
     if (!pakistan) return null;

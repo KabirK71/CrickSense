@@ -1,6 +1,8 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { deliveries, iccRankings, innings, matches, players } from "./schema";
+import { deliveries, iccRankings, innings, liveStatus, matches, players } from "./schema";
+
+const LIVE_STATUS_STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000; // 3 days -- covers a missed cron run or two
 
 /** SQL condition restricting to a single calendar year of matches, or a no-op when year is omitted. */
 function yearFilter(year?: number) {
@@ -209,6 +211,14 @@ function toPercentages(rows: { label: string; count: number }[]) {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
+}
+
+/** The daily-refreshed "who's Pakistan playing" snapshot, or null if we've never saved one or it's gone stale. */
+export async function getLiveStatus() {
+  const [row] = await db.select().from(liveStatus).limit(1);
+  if (!row) return null;
+  if (Date.now() - row.updatedAt.getTime() > LIVE_STATUS_STALE_AFTER_MS) return null;
+  return row;
 }
 
 export async function getLatestMatch() {
