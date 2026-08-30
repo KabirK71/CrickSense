@@ -13,6 +13,7 @@ import {
   getWicketsByPhase,
   initials,
   isBattingRole,
+  isBowlingRole,
 } from "@/db/queries";
 import { generateSuggestion } from "@/lib/suggestion";
 import { FILTER_LABELS } from "@/lib/search";
@@ -31,12 +32,19 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
   const player = await getPlayerById(playerId);
   if (!player) notFound();
 
-  const batting = isBattingRole(player.role);
+  // All-rounders are both, so this isn't an either/or -- an all-rounder's
+  // page shows both stat blocks, both bar charts, everything a specialist
+  // in either discipline would get.
+  const showBatting = isBattingRole(player.role);
+  const showBowling = isBowlingRole(player.role);
+  const bothShown = showBatting && showBowling;
 
-  const [stats, bars, dismissals, plan, squad] = await Promise.all([
-    batting ? getBattingStats(playerId) : getBowlingStats(playerId),
-    batting ? getDismissalsByBowlerType(playerId) : getWicketsByPhase(playerId),
-    batting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
+  const [battingStats, bowlingStats, dismissalBars, phaseBars, dismissals, plan, squad] = await Promise.all([
+    showBatting ? getBattingStats(playerId) : Promise.resolve(null),
+    showBowling ? getBowlingStats(playerId) : Promise.resolve(null),
+    showBatting ? getDismissalsByBowlerType(playerId) : Promise.resolve([]),
+    showBowling ? getWicketsByPhase(playerId) : Promise.resolve([]),
+    showBatting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
     generateSuggestion(player, filter),
     getCurrentSquad(),
   ]);
@@ -54,25 +62,28 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
       }
     : null;
 
-  const statItems: StatItem[] = batting
+  const iccRankValue = player.iccTestRank ? `#${player.iccTestRank}` : "Unranked";
+
+  const battingItems: StatItem[] | null = battingStats
     ? [
-        { label: "Runs since 2021", value: (stats as Awaited<ReturnType<typeof getBattingStats>>).runs.toLocaleString() },
-        { label: "Average", value: String((stats as Awaited<ReturnType<typeof getBattingStats>>).average) },
-        { label: "ICC Test rank", value: player.iccTestRank ? `#${player.iccTestRank}` : "Unranked" },
-        { label: "Strike rate", value: String((stats as Awaited<ReturnType<typeof getBattingStats>>).strikeRate) },
+        { label: "Runs since 2021", value: battingStats.runs.toLocaleString() },
+        { label: "Average", value: String(battingStats.average) },
+        { label: "ICC Test rank", value: iccRankValue },
+        { label: "Strike rate", value: String(battingStats.strikeRate) },
       ]
-    : [
-        { label: "Wickets since 2021", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).wickets) },
-        { label: "Bowling average", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).average) },
-        { label: "ICC Test rank", value: player.iccTestRank ? `#${player.iccTestRank}` : "Unranked" },
-        { label: "Economy", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).economy) },
-      ];
+    : null;
 
-  const related = squad.filter((p) => p.id !== player.id && isBattingRole(p.role) === batting).slice(0, 3);
+  const bowlingItems: StatItem[] | null = bowlingStats
+    ? [
+        { label: "Wickets since 2021", value: String(bowlingStats.wickets) },
+        { label: "Bowling average", value: String(bowlingStats.average) },
+        // Already shown in the batting cards for an all-rounder -- no need twice.
+        ...(bothShown ? [] : [{ label: "ICC Test rank", value: iccRankValue }]),
+        { label: "Economy", value: String(bowlingStats.economy) },
+      ]
+    : null;
 
-  const ballsLabel = batting
-    ? (stats as Awaited<ReturnType<typeof getBattingStats>>).ballsFaced
-    : (stats as Awaited<ReturnType<typeof getBowlingStats>>).ballsBowled;
+  const related = squad.filter((p) => p.id !== player.id && isBattingRole(p.role) === showBatting).slice(0, 3);
 
   return (
     <div>
@@ -162,40 +173,82 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
 
           <div className="page-columns" style={{ alignItems: "start" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
-              <PlayerStatsCards stats={statItems} />
+              {battingItems && (
+                <>
+                  {bothShown && <DisciplineLabel>Batting</DisciplineLabel>}
+                  <PlayerStatsCards stats={battingItems} />
+                </>
+              )}
+              {bowlingItems && (
+                <>
+                  {bothShown && <DisciplineLabel>Bowling</DisciplineLabel>}
+                  <PlayerStatsCards stats={bowlingItems} />
+                </>
+              )}
 
-              <div style={{ ...card, borderRadius: 14, padding: 22, display: "flex", flexDirection: "column", gap: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+              {showBatting && (
+                <div style={{ ...card, borderRadius: 14, padding: 22, display: "flex", flexDirection: "column", gap: 18 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                    <div
+                      style={{
+                        font: "500 10.5px/1 var(--font-mono)",
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        color: "oklch(0.52 0.01 100)",
+                      }}
+                    >
+                      Dismissals by bowler type
+                    </div>
+                    <div style={{ fontSize: 12, color: "oklch(0.58 0.012 100)" }}>Share of dismissals, 2021–2026</div>
+                  </div>
+                  <DismissalBars bars={dismissalBars} palette={CLAY} />
                   <div
                     style={{
-                      font: "500 10.5px/1 var(--font-mono)",
-                      letterSpacing: "0.16em",
-                      textTransform: "uppercase",
-                      color: "oklch(0.52 0.01 100)",
+                      fontSize: 12,
+                      color: "oklch(0.58 0.012 100)",
+                      borderTop: "1px solid oklch(0.94 0.005 100)",
+                      paddingTop: 14,
+                      lineHeight: 1.45,
                     }}
                   >
-                    {batting ? "Dismissals by bowler type" : "Wickets by innings phase"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "oklch(0.58 0.012 100)" }}>
-                    {batting ? "Share of dismissals, 2021–2026" : "Share of wickets, 2021–2026"}
+                    Weakness is measured on available ball-by-ball fields — dismissal type, bowler type and innings
+                    phase.
                   </div>
                 </div>
-                <DismissalBars bars={bars} palette={batting ? CLAY : GREEN} />
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "oklch(0.58 0.012 100)",
-                    borderTop: "1px solid oklch(0.94 0.005 100)",
-                    paddingTop: 14,
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Weakness is measured on available ball-by-ball fields — dismissal type, bowler type and innings
-                  phase.
-                </div>
-              </div>
+              )}
 
-              {batting && dismissals.length > 0 && (
+              {showBowling && (
+                <div style={{ ...card, borderRadius: 14, padding: 22, display: "flex", flexDirection: "column", gap: 18 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                    <div
+                      style={{
+                        font: "500 10.5px/1 var(--font-mono)",
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        color: "oklch(0.52 0.01 100)",
+                      }}
+                    >
+                      Wickets by innings phase
+                    </div>
+                    <div style={{ fontSize: 12, color: "oklch(0.58 0.012 100)" }}>Share of wickets, 2021–2026</div>
+                  </div>
+                  <DismissalBars bars={phaseBars} palette={GREEN} />
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "oklch(0.58 0.012 100)",
+                      borderTop: "1px solid oklch(0.94 0.005 100)",
+                      paddingTop: 14,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Weakness is measured on available ball-by-ball fields — dismissal type, bowler type and innings
+                    phase.
+                  </div>
+                </div>
+              )}
+
+              {showBatting && dismissals.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div
                     style={{
@@ -359,8 +412,18 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                   Data coverage
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-                  <Row label="Innings" value={String(stats.innings)} />
-                  <Row label={batting ? "Balls faced" : "Balls bowled"} value={ballsLabel.toLocaleString()} />
+                  {battingStats && (
+                    <>
+                      <Row label={bothShown ? "Batting innings" : "Innings"} value={String(battingStats.innings)} />
+                      <Row label="Balls faced" value={battingStats.ballsFaced.toLocaleString()} />
+                    </>
+                  )}
+                  {bowlingStats && (
+                    <>
+                      <Row label={bothShown ? "Bowling innings" : "Innings"} value={String(bowlingStats.innings)} />
+                      <Row label="Balls bowled" value={bowlingStats.ballsBowled.toLocaleString()} />
+                    </>
+                  )}
                   <Row label="Period" value="2021–2026" />
                 </div>
                 <div
@@ -422,6 +485,23 @@ function Row({ label, value }: { label: string; value: string }) {
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
       <span style={{ color: "oklch(0.50 0.012 100)" }}>{label}</span>
       <span style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
+    </div>
+  );
+}
+
+// Only shown for all-rounders, who get both a batting and a bowling stat
+// block -- specialists just get the one, unlabeled, as before.
+function DisciplineLabel({ children }: { children: string }) {
+  return (
+    <div
+      style={{
+        font: "500 10.5px/1 var(--font-mono)",
+        letterSpacing: "0.16em",
+        textTransform: "uppercase",
+        color: "oklch(0.52 0.01 100)",
+      }}
+    >
+      {children}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   getPlayerById,
   getWicketsByPhase,
   isBattingRole,
+  isBowlingRole,
 } from "@/db/queries";
 import { getHighlights } from "@/lib/highlights";
 import { generateSuggestion } from "@/lib/suggestion";
@@ -81,35 +82,50 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/pdf/[view]">) {
     if (!player) {
       return NextResponse.json({ error: "Player not found" }, { status: 404 });
     }
-    const batting = isBattingRole(player.role);
-    const [stats, bars, dismissals, plan] = await Promise.all([
-      batting ? getBattingStats(playerId) : getBowlingStats(playerId),
-      batting ? getDismissalsByBowlerType(playerId) : getWicketsByPhase(playerId),
-      batting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
+    const showBatting = isBattingRole(player.role);
+    const showBowling = isBowlingRole(player.role);
+    const [battingStats, bowlingStats, dismissalBars, phaseBars, dismissals, plan] = await Promise.all([
+      showBatting ? getBattingStats(playerId) : Promise.resolve(null),
+      showBowling ? getBowlingStats(playerId) : Promise.resolve(null),
+      showBatting ? getDismissalsByBowlerType(playerId) : Promise.resolve([]),
+      showBowling ? getWicketsByPhase(playerId) : Promise.resolve([]),
+      showBatting ? getDismissalTypeBreakdown(playerId) : Promise.resolve([]),
       generateSuggestion(player),
     ]);
 
-    const statItems = batting
-      ? [
-          { label: "Runs", value: (stats as Awaited<ReturnType<typeof getBattingStats>>).runs.toLocaleString() },
-          { label: "Average", value: String((stats as Awaited<ReturnType<typeof getBattingStats>>).average) },
-          { label: "Strike rate", value: String((stats as Awaited<ReturnType<typeof getBattingStats>>).strikeRate) },
-          { label: "Innings", value: String(stats.innings) },
-        ]
-      : [
-          { label: "Wickets", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).wickets) },
-          { label: "Average", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).average) },
-          { label: "Economy", value: String((stats as Awaited<ReturnType<typeof getBowlingStats>>).economy) },
-          { label: "Innings", value: String(stats.innings) },
-        ];
+    const batting = battingStats
+      ? {
+          title: "Dismissals by bowler type",
+          statItems: [
+            { label: "Runs", value: battingStats.runs.toLocaleString() },
+            { label: "Average", value: String(battingStats.average) },
+            { label: "Strike rate", value: String(battingStats.strikeRate) },
+            { label: "Innings", value: String(battingStats.innings) },
+          ],
+          bars: dismissalBars,
+        }
+      : null;
+
+    const bowling = bowlingStats
+      ? {
+          title: "Wickets by innings phase",
+          statItems: [
+            { label: "Wickets", value: String(bowlingStats.wickets) },
+            { label: "Average", value: String(bowlingStats.average) },
+            { label: "Economy", value: String(bowlingStats.economy) },
+            { label: "Innings", value: String(bowlingStats.innings) },
+          ],
+          bars: phaseBars,
+        }
+      : null;
 
     const buffer = await renderToBuffer(
       PlayerReport({
         name: player.name,
         roleLabel: player.roleLabel,
         iccTestRank: player.iccTestRank,
-        statItems,
-        bars,
+        batting,
+        bowling,
         dismissals,
         plan,
         generatedOn: generatedOn(),

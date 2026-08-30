@@ -43,12 +43,19 @@ function label(l: string) {
   return PHASE_LABEL[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
 }
 
+type Discipline = {
+  title: string;
+  statItems: { label: string; value: string }[];
+  bars: { label: string; pct: number }[];
+};
+
 export type PlayerReportProps = {
   name: string;
   roleLabel: string;
   iccTestRank: number | null;
-  statItems: { label: string; value: string }[];
-  bars: { label: string; pct: number }[];
+  // Both present for an all-rounder; a specialist only ever has one.
+  batting: Discipline | null;
+  bowling: Discipline | null;
   dismissals: { label: string; pct: number }[];
   plan: string[];
   generatedOn: string;
@@ -58,8 +65,8 @@ export default function PlayerReport({
   name,
   roleLabel,
   iccTestRank,
-  statItems,
-  bars,
+  batting,
+  bowling,
   dismissals,
   plan,
   generatedOn,
@@ -80,29 +87,33 @@ export default function PlayerReport({
           </Text>
         </View>
 
-        <View style={s.statRow}>
-          {statItems.map((item, i) => (
-            <View key={item.label} style={i === statItems.length - 1 ? { flex: 1, padding: 12 } : s.statCell}>
-              <Text style={s.statLabel}>{item.label.toUpperCase()}</Text>
-              <Text style={s.statValue}>{item.value}</Text>
+        {[batting, bowling].filter((d): d is Discipline => d !== null).map((d) => (
+          <View key={d.title}>
+            <View style={s.statRow}>
+              {d.statItems.map((item, i) => (
+                <View key={item.label} style={i === d.statItems.length - 1 ? { flex: 1, padding: 12 } : s.statCell}>
+                  <Text style={s.statLabel}>{item.label.toUpperCase()}</Text>
+                  <Text style={s.statValue}>{item.value}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
 
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{bars[0] && bars[0].label in PHASE_LABEL ? "Wickets by innings phase" : "Dismissals by bowler type"}</Text>
-          {bars.map((b, i) => (
-            <View key={b.label} style={s.barRow}>
-              <View style={s.barLabelRow}>
-                <Text>{label(b.label)}</Text>
-                <Text>{b.pct}%</Text>
-              </View>
-              <View style={s.barTrack}>
-                <View style={{ height: 9, width: `${b.pct}%`, backgroundColor: BAR_SHADES[i % 3] }} />
-              </View>
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>{d.title}</Text>
+              {d.bars.map((b, i) => (
+                <View key={b.label} style={s.barRow}>
+                  <View style={s.barLabelRow}>
+                    <Text>{label(b.label)}</Text>
+                    <Text>{b.pct}%</Text>
+                  </View>
+                  <View style={s.barTrack}>
+                    <View style={{ height: 9, width: `${b.pct}%`, backgroundColor: BAR_SHADES[i % 3] }} />
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
 
         {dismissals.length > 0 && (
           <View style={s.section}>
