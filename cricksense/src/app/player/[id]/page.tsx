@@ -191,7 +191,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                   }}
                 >
                   Weakness is measured on available ball-by-ball fields — dismissal type, bowler type and innings
-                  phase. No line/length or pitch-map data in V1.
+                  phase.
                 </div>
               </div>
 
@@ -278,7 +278,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                 <div style={{ fontSize: 11.5, color: "oklch(0.48 0.04 158)", lineHeight: 1.4 }}>
                   {filterLabel
                     ? `Scoped to dismissals involving ${filterLabel}. Clear the filter for this player's overall plan.`
-                    : "Generated from this player's dismissal and phase splits. Up to three points per player, regenerated on data refresh."}
+                    : "Generated from this player's dismissal and phase splits."}
                 </div>
                 {filterLabel && (
                   <Link
@@ -371,8 +371,6 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                     color: "oklch(0.58 0.012 100)",
                   }}
                 >
-                  SOURCE: CRICSHEET.ORG
-                  <br />
                   ICC RANK: WEEKLY REFRESH
                 </div>
               </div>

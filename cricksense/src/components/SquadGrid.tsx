@@ -81,9 +81,6 @@ export default function SquadGrid({ squad }: { squad: SquadPlayer[] }) {
           </Link>
         ))}
       </div>
-      <div style={{ fontSize: 11.5, color: "oklch(0.60 0.012 100)" }}>
-        Photos are placeholders — licensing to be confirmed before public launch.
-      </div>
     </div>
   );
 }
